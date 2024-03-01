@@ -87,4 +87,6 @@ Outputs:
   DBSGId:
     Description: Security Group ID for DB Tier
     Value: !GetAtt DBSG.GroupId
+    Export:
+      Name: SGStack-DBSGId
 

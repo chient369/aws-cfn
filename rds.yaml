@@ -19,17 +19,25 @@ Parameters:
     AllowedPattern: '[a-zA-Z0-9]*'
     ConstraintDescription: Must contain only alphanumeric characters.
     Default: AdminDef
+
   DBClusterIdentifier:
     Type: String
-    Default: lab7-db-clu
+    Default: lab7-db
+
   DBName:
     Type: String
+
   Engine:
     Type: String
     Default: aurora-mysql
-  AllocatedStorage:
-    Type: Number
-    Default: 20  
+
+  EngineVersion:
+    Type: String
+    Default: 8.0.mysql_aurora.3.01.1
+
+  InstanceClass:
+    Type: String
+    Default: db.r5.large
     
   SubnetGroups:
     Type: List<AWS::EC2::Subnet::Id>
@@ -39,21 +47,6 @@ Parameters:
     Type: List<AWS::EC2::SecurityGroup::Id>
 
 Resources:
-  DBCluster:
-    Type: 'AWS::RDS::DBCluster'
-    Properties:
-      MasterUsername: !Ref DBUsername
-      MasterUserPassword: !Ref DBPassword
-      DBClusterIdentifier: !Ref DBClusterIdentifier
-      DatabaseName: !Ref DBName
-      Engine: !Ref Engine
-      AllocatedStorage: !Ref AllocatedStorage
-      DBClusterInstanceClass: db.r5.large
-      PubliclyAccessible: false
-      VpcSecurityGroupIds: 
-        - !Ref DBSecurityGroupIds
-      DBSubnetGroupName: !Ref DBSubnetGroup
-
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -62,7 +55,22 @@ Resources:
       SubnetIds: 
         - !Select [0, !Ref SubnetGroups]
         - !Select [1, !Ref SubnetGroups]
+
+  MySQLDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: !Ref InstanceClass
+      DBClusterIdentifier: !Ref DBClusterIdentifier 
+      Engine: aurora-mysql
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      EngineVersion: !Ref EngineVersion
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      PubliclyAccessible: false
+      MultiAZ: true
+      VPCSecurityGroups: 
+        - !Select [0, !Ref DBSecurityGroupIds]
         
 Outputs:
     DBEndPoint:
-        Value: !GetAtt DBCluster.Endpoint.Address
+        Value: !GetAtt MySQLDBInstance.Endpoint.Address

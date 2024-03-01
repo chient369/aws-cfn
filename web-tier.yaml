@@ -150,6 +150,7 @@ Resources:
         LaunchTemplateId: !Ref WebServerTemplate
         Version: !GetAtt WebServerTemplate.LatestVersionNumber
       HealthCheckType: ELB
+      DefaultInstanceWarmup: 120
       VPCZoneIdentifier:
         - !Ref WebTierPublicSubnet1
         - !Ref WebTierPublicSubnet2
@@ -177,10 +178,6 @@ Resources:
       HealthCheckPath: /health
       Port: 80
       Protocol: HTTP
-      HealthCheckTimeoutSeconds: 90
-      UnhealthyThresholdCount: 3
-      HealthyThresholdCount: 5
-      HealthCheckIntervalSeconds: 100
       Tags:
         - Key: Name
           Value: web tier ASG

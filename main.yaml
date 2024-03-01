@@ -31,7 +31,7 @@ Parameters:
     Default: lab7-db-clu
   DBName: 
     Type: String
-    Default: lab7-DB
+    Default: webappdb
 
 Resources:
   VPCStack:
@@ -40,7 +40,7 @@ Resources:
       TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/cfn/vpc.yaml
       TimeoutInMinutes: 20
 
-# SG configuration
+ # SG configuration
   SGStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -48,7 +48,8 @@ Resources:
       TimeoutInMinutes: 20
       Parameters:
         VPCId: !GetAtt VPCStack.Outputs.VpcId
-        
+
+ #DB stack configuration     
   DBStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -59,14 +60,15 @@ Resources:
         DBPassword: !Ref DBPassword
         DBClusterIdentifier: !Ref DBClusterIdentifier
         DBName: !Ref DBName
-        DBSecurityGroupId: !GetAtt SGStack.Outputs.DBSGId
+        DBSecurityGroupIds: !GetAtt SGStack.Outputs.DBSGId
         SubnetGroups: 
           Fn::Join:
             - ','
             - - !GetAtt VPCStack.Outputs.DBTierPrivateSubnet1
               - !GetAtt VPCStack.Outputs.DBTierPrivateSubnet2
-  
-  AppServerStack:
+
+  #App server stack configuration
+  AppTierStack:
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/cfn/app-tier.yaml
@@ -86,7 +88,7 @@ Resources:
 
   WebServerStack:
     Type: AWS::CloudFormation::Stack
-    Properties:
+    Properties: 
       TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/cfn/web-tier.yaml
       TimeoutInMinutes: 20
       Parameters:
@@ -96,11 +98,11 @@ Resources:
         WebTierSG: !GetAtt SGStack.Outputs.WebTierSGId
         WebTierPublicSubnet1: !GetAtt VPCStack.Outputs.WebTierPublicSubnet1
         WebTierPublicSubnet2: !GetAtt VPCStack.Outputs.WebTierPublicSubnet2
-        InternalLBEDNS: !GetAtt AppServerStack.Outputs.InternalALBDNS
+        InternalLBEDNS: !GetAtt AppTierStack.Outputs.InternalALBDNS
         ExtenalALBSG: !GetAtt SGStack.Outputs.ExternalALBSGId
     
 
-Outputs:
-  WebsiteURL:
-    Value: !GetAtt WebServerStack.Outputs.WebsiteURL
+# Outputs:
+#   WebsiteURL:
+#     Value: !GetAtt WebServerStack.Outputs.WebsiteURL
 
