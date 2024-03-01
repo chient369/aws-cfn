@@ -1,0 +1,223 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: AWS CloudFormation workshop - User data (uksb-1q9p31idr) (tag:user-data).
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: 'Amazon EC2 Configuration'
+        Parameters:
+          - AmiID
+    ParameterLabels:
+      AmiID:
+        default: 'Amazon Machine Image ID'
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: S3 bucket url
+    
+  VpcId:
+    Type: String
+    Description: VPC of id
+    
+  AppServerInstanceType:
+    Type: String
+    Description: WebTier of instance size
+
+  AmiID:
+    Type: String
+    Description: 'The ID of the AMI.'
+    Default: ami-07761f3ae34c4478d
+    
+  AppTierSG:
+    Type: String
+    Description: SG for application tier instance
+
+  AppTierPrivateSubnet1:
+    Type: String
+    Description: Default application tier public subnet
+    
+  AppTierPrivateSubnet2:
+    Type: String
+    Description: Default Application tier public subnet
+    
+  InternalALBSG:
+    Type: String
+    Description: App Tier of internal load balancer of SG
+    
+  DBUserName:
+    Type: String
+    Description: RDS DB of name
+
+  DBConnectionDNS:
+    Type: String
+    Description: RDS endpoint connection
+
+  DBPassWord:
+    Type: String
+    Description: RDS DB of password
+  
+  DatabaseName:
+    Type: String
+    Description: Database
+    
+
+Resources:
+  SSMIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+
+  AppServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref SSMIAMRole
+
+  AppServerTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: appserver-template
+      LaunchTemplateData:
+        ImageId: !Ref AmiID
+        InstanceType: !Ref AppServerInstanceType
+        IamInstanceProfile: 
+          Arn: !GetAtt AppServerInstanceProfile.Arn
+        NetworkInterfaces: 
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: True
+            Groups:
+              - !Ref AppTierSG
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: App tier instance
+        UserData: 
+          Fn::Base64:
+            !Sub |
+              #!/bin/bash
+              export HOME=/home/ec2-user
+              sudo yum update -y 
+              
+              sudo yum install mysql -y
+              
+              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+              export NVM_DIR="$HOME/.nvm"
+              [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+              source ~/.bashrc
+              nvm install 16
+              nvm use 16
+              version=$(node --version)
+              node -e "console.log('Running Node.js ' + process.version)"
+              
+              npm install -g pm2 
+              
+              cd /home/ec2-user
+              aws s3 cp s3://${S3BucketName}/src/app-tier/ app-tier --recursive
+              
+              cd /app-tier
+              
+              # Update environment variables in DbConfig.js
+              sudo sed -i "s/DB_ENDPOINT/${DBConnectionDNS}/g" DbConfig.js
+              sudo sed -i "s/DB_USERNAME/${DBUserName}/g" DbConfig.js
+              sudo sed -i "s/DB_PASSWORD/${DBPassWord}/g" DbConfig.js
+              sudo sed -i "s/DB_DATABASE/${DatabaseName}/g" DbConfig.js
+              
+              npm install 
+              
+              pm2 start index.js 
+              pm2 startup
+              pm2 save
+
+#Create AutoScaling
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MinSize: '1'
+      MaxSize: '1'
+      DesiredCapacity: '1'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref AppServerTemplate
+        Version: !GetAtt AppServerTemplate.LatestVersionNumber
+      HealthCheckType: ELB
+      VPCZoneIdentifier:
+        - !Ref AppTierPrivateSubnet1
+        - !Ref AppTierPrivateSubnet2
+
+      TargetGroupARNs: 
+        - !Ref ALBTargetGroups
+
+#Policy used to track CPU usage for autoscaling
+  cpuUsage:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 50
+
+#Create Targetgroup
+  ALBTargetGroups:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      TargetType: instance
+      HealthCheckPath: /health
+      Port: 4000
+      Protocol: HTTP
+      HealthCheckTimeoutSeconds: 90
+      UnhealthyThresholdCount: 3
+      HealthyThresholdCount: 5
+      HealthCheckIntervalSeconds: 100
+      Tags:
+        - Key: Name
+          Value: App tier ASG
+
+#Create ALB
+  InternalALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internal
+      SecurityGroups:
+      - !Ref InternalALBSG
+      Subnets: 
+      - !Ref AppTierPrivateSubnet1
+      - !Ref AppTierPrivateSubnet2
+
+      Tags:
+        - Key: Name
+          Value: Internal ALB
+
+#Create ALB listener
+  InternalALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroups
+      LoadBalancerArn: !Ref InternalALB
+
+Outputs:
+  InternalALBDNS:
+    Description: 'Internal ALB DNS of application server'
+    Value: !GetAtt InternalALB.DNSName
+

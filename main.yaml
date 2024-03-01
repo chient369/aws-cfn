@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: AWS CloudFormation workshop - Nested stacks - Root template (uksb-1q9p31idr) (tag:nested-stacks).
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: S3 bucket url
+    Default: lab7-bucket99
+    
+  AppServerInstanceType:
+    Type: String
+    Description: Application server of size
+    Default: t2.micro
+    
+  WebServerInstanceType:
+    Type: String
+    Description: Web server server of size
+    Default: t2.micro
+
+  DBUsername:
+    Description: Username for database access
+    Type: String
+    Default: chientvAdmin
+  DBPassword:
+    Description: Password for database access
+    Type: String
+    Default: AdminDef
+  DBClusterIdentifier:
+    Type: String
+    Default: lab7-db-clu
+  DBName: 
+    Type: String
+    Default: lab7-DB
+
+Resources:
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/cfn/vpc.yaml
+      TimeoutInMinutes: 20
+
+# SG configuration
+  SGStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/cfn/sg.yaml
+      TimeoutInMinutes: 20
+      Parameters:
+        VPCId: !GetAtt VPCStack.Outputs.VpcId
+        
+  DBStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/cfn/rds.yaml
+      TimeoutInMinutes: 20
+      Parameters:
+        DBUsername: !Ref DBUsername
+        DBPassword: !Ref DBPassword
+        DBClusterIdentifier: !Ref DBClusterIdentifier
+        DBName: !Ref DBName
+        DBSecurityGroupId: !GetAtt SGStack.Outputs.DBSGId
+        SubnetGroups: 
+          Fn::Join:
+            - ','
+            - - !GetAtt VPCStack.Outputs.DBTierPrivateSubnet1
+              - !GetAtt VPCStack.Outputs.DBTierPrivateSubnet2
+  
+  AppServerStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/cfn/app-tier.yaml
+      TimeoutInMinutes: 20
+      Parameters:
+        VpcId: !GetAtt VPCStack.Outputs.VpcId
+        S3BucketName: !Ref S3BucketName
+        AppServerInstanceType: !Ref AppServerInstanceType
+        AppTierSG: !GetAtt SGStack.Outputs.AppTierSGId
+        AppTierPrivateSubnet1: !GetAtt VPCStack.Outputs.AppTierPrivateSubnet1
+        AppTierPrivateSubnet2: !GetAtt VPCStack.Outputs.AppTierPrivateSubnet2
+        InternalALBSG: !GetAtt SGStack.Outputs.InternalALBSGId
+        DBUserName: !Ref DBUsername
+        DBConnectionDNS: !GetAtt DBStack.Outputs.DBEndPoint
+        DBPassword: !Ref DBPassword
+        DatabaseName: !Ref DBName
+
+  WebServerStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/cfn/web-tier.yaml
+      TimeoutInMinutes: 20
+      Parameters:
+        S3BucketName: !Ref S3BucketName
+        VpcId: !GetAtt VPCStack.Outputs.VpcId
+        WebServerInstanceType: !Ref WebServerInstanceType
+        WebTierSG: !GetAtt SGStack.Outputs.WebTierSGId
+        WebTierPublicSubnet1: !GetAtt VPCStack.Outputs.WebTierPublicSubnet1
+        WebTierPublicSubnet2: !GetAtt VPCStack.Outputs.WebTierPublicSubnet2
+        InternalLBEDNS: !GetAtt AppServerStack.Outputs.InternalALBDNS
+        ExtenalALBSG: !GetAtt SGStack.Outputs.ExternalALBSGId
+    
+
+Outputs:
+  WebsiteURL:
+    Value: !GetAtt WebServerStack.Outputs.WebsiteURL
+

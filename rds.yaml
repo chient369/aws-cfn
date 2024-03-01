@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation Sample Template for creating a Multi-AZ DB cluster.
+Parameters:
+  DBUsername:
+    NoEcho: 'true'
+    Description: Username for database access
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters.
+    Default: chientvAdmin
+  DBPassword:
+    NoEcho: 'true'
+    Description: Password for database access
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: Must contain only alphanumeric characters.
+    Default: AdminDef
+  DBClusterIdentifier:
+    Type: String
+    Default: lab7-db-clu
+  DBName:
+    Type: String
+  Engine:
+    Type: String
+    Default: aurora-mysql
+  AllocatedStorage:
+    Type: Number
+    Default: 20  
+    
+  SubnetGroups:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The list of Availability Zones to use for the subnets in the VPC.
+
+  DBSecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+
+Resources:
+  DBCluster:
+    Type: 'AWS::RDS::DBCluster'
+    Properties:
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBClusterIdentifier: !Ref DBClusterIdentifier
+      DatabaseName: !Ref DBName
+      Engine: !Ref Engine
+      AllocatedStorage: !Ref AllocatedStorage
+      DBClusterInstanceClass: db.r5.large
+      PubliclyAccessible: false
+      VpcSecurityGroupIds: 
+        - !Ref DBSecurityGroupIds
+      DBSubnetGroupName: !Ref DBSubnetGroup
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS DB of subnets group
+      DBSubnetGroupName: DBSubnetGroup
+      SubnetIds: 
+        - !Select [0, !Ref SubnetGroups]
+        - !Select [1, !Ref SubnetGroups]
+        
+Outputs:
+    DBEndPoint:
+        Value: !GetAtt DBCluster.Endpoint.Address

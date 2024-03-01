@@ -1,0 +1,222 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: AWS CloudFormation workshop - User data (uksb-1q9p31idr) (tag:user-data).
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: 'Amazon EC2 Configuration'
+        Parameters:
+          - AmiID
+    ParameterLabels:
+      AmiID:
+        default: 'Amazon Machine Image ID'
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: S3 bucket url
+    
+  VpcId:
+    Type: String
+    Description: VPC of id
+    
+  WebServerInstanceType:
+    Type: String
+    Description: WebTier of instance size
+
+  AmiID:
+    Type: String
+    Description: 'The ID of the AMI.'
+    Default: ami-07761f3ae34c4478d
+    
+  WebTierSG:
+    Type: String
+    Description: SG for Web tier instance
+
+  WebTierPublicSubnet1:
+    Type: String
+    Description: Default web tier public subnet
+    
+  WebTierPublicSubnet2:
+    Type: String
+    Description: Default web tier public subnet
+
+  InternalLBEDNS:
+    Type: String
+    Description: Internal LB DNS for nginx server
+    
+  ExtenalALBSG:
+    Type: String
+    Description: Extenal ALB of SG
+    
+#   DBName:
+#     Type: String
+#     Description: RDS DB of name
+
+#   DBConnectionURL:
+#     Type: String
+#     Description: RDS endpoint connection
+
+#   DBPassWord:
+#     Type: String
+#     Description: RDS DB of password
+    
+
+Resources:
+  SSMIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+
+  WebServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref SSMIAMRole
+
+  WebServerTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: webserver-template
+      LaunchTemplateData:
+        ImageId: !Ref AmiID
+        InstanceType: !Ref WebServerInstanceType
+        IamInstanceProfile: 
+          Arn: !GetAtt WebServerInstanceProfile.Arn
+        NetworkInterfaces: 
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: True
+            Groups:
+              - !Ref WebTierSG
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: Web tier instance
+        UserData: 
+          Fn::Base64:
+            !Sub |
+              #!/bin/bash
+              sudo yum update -y
+              
+              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+              export NVM_DIR="$HOME/.nvm"
+              [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+              source ~/.bashrc
+              nvm install 16
+              nvm use 16
+              version=$(node --version)
+              node -e "console.log('Running Node.js ' + process.version)"
+              
+              cd /home/ec2-user/
+              aws s3 cp s3://${S3BucketName}/src/web-tier/ web-tier --recursive
+              
+              cd /home/ec2-user/web-tier
+              npm install
+              npm run build
+              
+              sudo amazon-linux-extras install nginx1 -y
+              
+              cd /etc/nginx
+              sudo rm nginx.conf
+              sudo aws s3 cp s3://${S3BucketName}/src/nginx.conf .
+              sudo sed -i "s/INTERNAL-LB-DNS/${InternalLBEDNS}/g" nginx.conf
+              
+              sudo service nginx restart
+              chmod -R 755 /home/ec2-user
+              sudo chkconfig nginx on
+
+#Create AutoScaling
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MinSize: '1'
+      MaxSize: '1'
+      DesiredCapacity: '1'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebServerTemplate
+        Version: !GetAtt WebServerTemplate.LatestVersionNumber
+      HealthCheckType: ELB
+      VPCZoneIdentifier:
+        - !Ref WebTierPublicSubnet1
+        - !Ref WebTierPublicSubnet2
+
+      TargetGroupARNs: 
+        - !Ref ALBTargetGroups
+
+#Policy used to track CPU usage for autoscaling
+  cpuUsage:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 50
+
+#Create Targetgroup
+  ALBTargetGroups:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      TargetType: instance
+      HealthCheckPath: /health
+      Port: 80
+      Protocol: HTTP
+      HealthCheckTimeoutSeconds: 90
+      UnhealthyThresholdCount: 3
+      HealthyThresholdCount: 5
+      HealthCheckIntervalSeconds: 100
+      Tags:
+        - Key: Name
+          Value: web tier ASG
+
+#Create ALB
+  WebTierExtenalALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internet-facing
+      SecurityGroups:
+      - !Ref ExtenalALBSG
+      Subnets: 
+      - !Ref WebTierPublicSubnet1
+      - !Ref WebTierPublicSubnet2
+
+      Tags:
+        - Key: Name
+          Value: Extenal ALB
+
+#Create ALB listener
+  ExtenalALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroups
+      LoadBalancerArn: !Ref WebTierExtenalALB
+
+Outputs:
+  WebServerPublicDNS:
+    Description: 'Public DNS of EC2 instance'
+    Value: !GetAtt WebTierExtenalALB.DNSName
+
+  WebsiteURL:
+    Value: !GetAtt WebTierExtenalALB.DNSName
+    Description: Application URL

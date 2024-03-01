@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Three Tier application - Nested Stack - SG
+
+Parameters:
+  VPCId:
+    Type: String
+    Description: The name of the VPC.
+    
+Resources:
+
+  ExtenalALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: internet-facing-lb-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref VPCId
+  
+  WebTierSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: web-tier-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ExtenalALBSG
+      VpcId: !Ref VPCId
+
+
+  InternalALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: internal-lb-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref WebTierSG
+      VpcId: !Ref VPCId
+
+
+  AppTierSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: app-tier-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 4000
+          ToPort: 4000
+          SourceSecurityGroupId: !Ref InternalALBSG
+      VpcId: !Ref VPCId
+
+
+  DBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: DB-tier-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref AppTierSG
+      VpcId: !Ref VPCId
+      
+Outputs:
+  ExternalALBSGId:
+    Description: Security Group ID for External ALB
+    Value: !GetAtt ExtenalALBSG.GroupId
+
+  WebTierSGId:
+    Description: Security Group ID for Web Tier
+    Value: !GetAtt WebTierSG.GroupId
+
+  InternalALBSGId:
+    Description: Security Group ID for Internal ALB
+    Value: !GetAtt InternalALBSG.GroupId
+
+  AppTierSGId:
+    Description: Security Group ID for App Tier
+    Value: !GetAtt AppTierSG.GroupId
+
+  DBSGId:
+    Description: Security Group ID for DB Tier
+    Value: !GetAtt DBSG.GroupId
+

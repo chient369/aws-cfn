@@ -1,0 +1,317 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Three Tier application - Nested Stack - VPC
+
+Parameters:
+  AvailabilityZones:
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+    Description: The list of Availability Zones to use for the subnets in the VPC.
+    Default: us-east-1a, us-east-1b
+
+  VPCName:
+    Type: String
+    Description: The name of the VPC.
+    Default: lab7-vpc
+
+  VPCCidr:
+    Type: String
+    Description: The CIDR block for the VPC.
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.0.0.0/16
+
+  WebTierPublicSubnet1Cidr:
+    Type: String
+    Description: The CIDR block for the web tier public subnet located in Availability Zone 1.
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.0.0.0/22
+
+  WebTierPublicSubnet2Cidr:
+    Type: String
+    Description: The CIDR block for the web tier public subnet located in Availability Zone 2.
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.0.4.0/22
+    
+  AppTierPrivateSubnet1Cidr:
+    Type: String
+    Description: The CIDR block for the app tier private subnet located in Availability Zone 1.
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.0.16.0/20
+
+  AppTierPrivateSubnet2Cidr:
+    Type: String
+    Description: The CIDR block for the app tier private subnet located in Availability Zone 2.
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.0.32.0/20
+    
+  DBTierPrivateSubnet1Cidr:
+    Type: String
+    Description: The CIDR block for the db tier private subnet located in Availability Zone 1.
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.0.192.0/21
+
+  DBTierPrivateSubnet2Cidr:
+    Type: String
+    Description: The CIDR block for the db tier private subnet located in Availability Zone 2.
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.0.200.0/21
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+# Web Tier configuration starts here
+
+  WebTierPublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref WebTierPublicSubnet1Cidr
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: WebTierPublicSubnet1
+        - Key: subnet-type
+          Value: Public
+
+  WebTierPublicSubnetRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: WebTierPublicSubnet1
+
+  WebTierPublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref:  WebTierPublicSubnetRouteTable
+      SubnetId:
+        Ref:  WebTierPublicSubnet1
+
+  # Route define
+  WebTierPublicSubnetDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref:  WebTierPublicSubnetRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: VPCIGW
+    DependsOn:
+      - VPCGW
+
+  WebTierPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref WebTierPublicSubnet2Cidr
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !Ref AvailabilityZones]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: WebTierPublicSubnet2
+        - Key: subnet-type
+          Value: Public
+
+  WebTierPublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref:  WebTierPublicSubnetRouteTable
+      SubnetId:
+        Ref:  WebTierPublicSubnet2
+
+# App tier configuration start here
+  AppTierPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref AppTierPrivateSubnet1Cidr
+      AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: AppTierPrivateSubnet1
+        - Key: subnet-type
+          Value: Private
+
+  AppTierPrivateSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AppTierPrivateSubnet1RouteTable
+
+  AppTierPrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref:  AppTierPrivateSubnet1RouteTable
+      SubnetId:
+        Ref:  AppTierPrivateSubnet1
+      
+# APptier sub 2
+  AppTierPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref AppTierPrivateSubnet2Cidr
+      AvailabilityZone: !Select [1, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: AppTierPrivateSubnet2
+        - Key: subnet-type
+          Value: Private
+
+  AppTierPrivateSubnet2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AppTierPrivateSubnet2RouteTable
+
+  AppTierPrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref:  AppTierPrivateSubnet2RouteTable
+      SubnetId:
+        Ref:  AppTierPrivateSubnet2
+
+  DBTierPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref DBTierPrivateSubnet1Cidr
+      AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: DBTierPrivateSubnet1
+        - Key: subnet-type
+          Value: Private
+
+  DBTierPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref DBTierPrivateSubnet2Cidr
+      AvailabilityZone: !Select [1, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: DBTierPrivateSubnet2
+        - Key: subnet-type
+          Value: Private
+
+# Internet Gateway configuration start here
+  VPCIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: VPCIGW
+
+  VPCGW:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: VPCIGW
+
+# NatGateWay configuration start
+  VPCNATGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+        AllocationId: !GetAtt VPCNATGateway1EIP.AllocationId
+        SubnetId: !Ref WebTierPublicSubnet1
+        Tags:
+        - Key: Name
+          Value: VPC NatGateway 1
+          
+  VPCNATGateway1EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+        Domain: !Ref VPC
+
+  RouteNATGateway1:
+    DependsOn: VPCNATGateway1
+    Type: AWS::EC2::Route
+    Properties:
+        RouteTableId: !Ref AppTierPrivateSubnet1RouteTable
+        DestinationCidrBlock: '0.0.0.0/0'
+        NatGatewayId: !Ref VPCNATGateway1
+
+  # NAT Gateway 2
+  VPCNATGateway2:
+    Type: AWS::EC2::NatGateway
+    DependsOn: VPCNATGateway2EIP
+    Properties:
+        AllocationId: !GetAtt VPCNATGateway2EIP.AllocationId
+        SubnetId: !Ref WebTierPublicSubnet2
+        Tags:
+        - Key: Name
+          Value: VPC NatGateway 2
+    
+
+  VPCNATGateway2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+        Domain: !Ref VPC
+
+  RouteNATGateway2:
+    DependsOn: VPCNATGateway2
+    Type: AWS::EC2::Route
+    Properties:
+        RouteTableId: !Ref AppTierPrivateSubnet2RouteTable
+        DestinationCidrBlock: '0.0.0.0/0'
+        NatGatewayId: !Ref VPCNATGateway2
+
+
+Outputs:
+  VpcId:
+    Description: VPC
+    Value: !Ref VPC
+
+  WebTierPublicSubnet1:
+    Description: Web tier of public subnet 1
+    Value: !Ref  WebTierPublicSubnet1
+
+  WebTierPublicSubnet2:
+    Description: Web tier of public subnet 2
+    Value: !Ref  WebTierPublicSubnet2
+
+  AppTierPrivateSubnet1:
+    Description: Application tier of public subnet 1
+    Value: !Ref  AppTierPrivateSubnet1
+
+  AppTierPrivateSubnet2:
+    Description: Application tier of public subnet 2
+    Value: !Ref  AppTierPrivateSubnet2
+    
+  DBTierPrivateSubnet1:
+    Description: DB tier of public subnet 1
+    Value: !Ref  DBTierPrivateSubnet1
+
+  DBTierPrivateSubnet2:
+    Description: DB tier of public subnet 2
+    Value: !Ref  DBTierPrivateSubnet2
+    
+
+
