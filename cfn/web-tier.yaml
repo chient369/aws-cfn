@@ -150,7 +150,7 @@ Resources:
         LaunchTemplateId: !Ref WebServerTemplate
         Version: !GetAtt WebServerTemplate.LatestVersionNumber
       HealthCheckType: ELB
-      DefaultInstanceWarmup: 120
+      HealthCheckGracePeriod: 300
       VPCZoneIdentifier:
         - !Ref WebTierPublicSubnet1
         - !Ref WebTierPublicSubnet2

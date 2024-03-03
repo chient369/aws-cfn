@@ -33,7 +33,7 @@ Parameters:
 
   EngineVersion:
     Type: String
-    Default: 8.0.mysql_aurora.3.01.1
+    Default: 8.0.mysql_aurora.3.04.1
 
   InstanceClass:
     Type: String
@@ -56,20 +56,32 @@ Resources:
         - !Select [0, !Ref SubnetGroups]
         - !Select [1, !Ref SubnetGroups]
 
+  DBCluster:
+    Type: 'AWS::RDS::DBCluster'
+    Properties:
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBClusterIdentifier: !Ref DBClusterIdentifier
+      DatabaseName: !Ref DBName
+      Engine: !Ref Engine
+      EngineVersion: !Ref EngineVersion
+      # DBClusterInstanceClass: !Ref InstanceClass
+      VpcSecurityGroupIds: !Ref DBSecurityGroupIds
+      DBSubnetGroupName: !Ref DBSubnetGroup
+
   MySQLDBInstance:
     Type: AWS::RDS::DBInstance
     Properties:
       DBInstanceClass: !Ref InstanceClass
-      DBClusterIdentifier: !Ref DBClusterIdentifier 
+      DBClusterIdentifier: !Ref DBCluster 
       Engine: aurora-mysql
-      MasterUsername: !Ref DBUsername
-      MasterUserPassword: !Ref DBPassword
+      # MasterUsername: !Ref DBUsername
+      # MasterUserPassword: !Ref DBPassword
       EngineVersion: !Ref EngineVersion
       DBSubnetGroupName: !Ref DBSubnetGroup
       PubliclyAccessible: false
-      MultiAZ: true
-      VPCSecurityGroups: 
-        - !Select [0, !Ref DBSecurityGroupIds]
+      # VPCSecurityGroups: 
+      #   - !Select [0, !Ref DBSecurityGroupIds]
         
 Outputs:
     DBEndPoint:

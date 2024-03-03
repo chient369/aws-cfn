@@ -6,7 +6,7 @@ Parameters:
   S3BucketName:
     Type: String
     Description: S3 bucket url
-    Default: lab7-bucket99
+    Default: lab7-bucket999
     
   AppServerInstanceType:
     Type: String
@@ -67,7 +67,7 @@ Resources:
             - - !GetAtt VPCStack.Outputs.DBTierPrivateSubnet1
               - !GetAtt VPCStack.Outputs.DBTierPrivateSubnet2
 
-  #App server stack configuration
+#   #App server stack configuration
   AppTierStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -102,7 +102,7 @@ Resources:
         ExtenalALBSG: !GetAtt SGStack.Outputs.ExternalALBSGId
     
 
-# Outputs:
-#   WebsiteURL:
-#     Value: !GetAtt WebServerStack.Outputs.WebsiteURL
+Outputs:
+  WebsiteURL:
+    Value: !GetAtt WebServerStack.Outputs.WebsiteURL
 

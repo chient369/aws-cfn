@@ -86,7 +86,7 @@ Resources:
       Path: /
       Roles:
         - !Ref SSMIAMRole
-
+  #Define app server of template
   AppServerTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -146,7 +146,7 @@ Resources:
               sudo sed -i "s/DB_ENDPOINT/${DBConnectionDNS}/g" DbConfig.js
               sudo sed -i "s/DB_USERNAME/${DBUserName}/g" DbConfig.js
               sudo sed -i "s/DB_PASSWORD/${DBPassword}/g" DbConfig.js
-              sudo sed -i "s/DB_DATABASE/webappdb/g" DbConfig.js
+              sudo sed -i "s/DB_NAME/${DatabaseName}/g" DbConfig.js
               
               echo "Starting the application using PM2..."2>&1
               npm install 
@@ -169,7 +169,7 @@ Resources:
         LaunchTemplateId: !Ref AppServerTemplate
         Version: !GetAtt AppServerTemplate.LatestVersionNumber
       HealthCheckType: ELB
-      DefaultInstanceWarmup: 120
+      DefaultInstanceWarmup: 0
       VPCZoneIdentifier:
         - !Ref AppTierPrivateSubnet1
         - !Ref AppTierPrivateSubnet2
